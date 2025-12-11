@@ -520,6 +520,18 @@ async function handler(req: Request): Promise<Response> {
     const path = url.pathname;
     const method = req.method;
 
+    // Health check / root endpoint (for Deno Deploy warm up)
+    if (path === "/" && method === "GET") {
+      return new Response(JSON.stringify({ 
+        status: "ok", 
+        service: "infiniax-deno-proxy",
+        version: "1.0.0"
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     // Route: POST /v1/chat/completions
     if (path === "/v1/chat/completions" && method === "POST") {
       return handleChatCompletions(req);
@@ -540,31 +552,23 @@ async function handler(req: Request): Promise<Response> {
 }
 
 // ============================================================================
-// Server Startup
+// Server Startup - Deno Deploy Compatible
 // ============================================================================
 
-// Export handler for Deno Deploy
+// For Deno Deploy: export default handler
+// Deno Deploy will automatically use this exported handler
 export default handler;
 
-// Start server when running locally (not on Deno Deploy)
-// Deno Deploy automatically uses the exported default handler
+// For local development: start server when run directly
+// Note: On Deno Deploy, import.meta.main is false, so this won't run
+// Deno Deploy uses the exported default handler instead
 if (import.meta.main) {
-  // Check cookie on local startup
+  console.log(`infiniax-deno-proxy starting...`);
+  
   if (!COOKIE) {
     console.error("Error: INFINIAX_COOKIE environment variable is not set.");
-    console.error("Please set it with your infiniax.ai authentication cookie.");
-    console.error("Example: INFINIAX_COOKIE='your_cookie_value' deno run --allow-net --allow-env main.ts");
     Deno.exit(1);
   }
-  
-  console.log(`infiniax-deno-proxy starting...`);
-  console.log(`Port: ${PORT}`);
-  
-  Deno.serve({ 
-    port: PORT,
-    onListen({ hostname, port }) {
-      console.log(`Server listening on http://${hostname}:${port}`);
-      console.log(`Ready to proxy requests to infiniax.ai`);
-    },
-  }, handler);
+
+  Deno.serve({ port: PORT }, handler);
 }
